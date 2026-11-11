@@ -1,0 +1,14 @@
+{
+  "primary_metric": "on_time_delivery_rate",
+  "on_time_delivery_rate": 0.28217821782178215,
+  "delivered_on_time_rate": 0.6368715083798883,
+  "total_parcels": 808,
+  "delivered_count": 358,
+  "undelivered_count": 450,
+  "on_time_count": 228,
+  "early_count": 0,
+  "late_count": 130,
+  "average_abs_window_deviation_minutes": 70.5696480446928,
+  "max_late_minutes": 403.05799999999977,
+  "number_of_trips": 20
+}

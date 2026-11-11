@@ -6,8 +6,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from simulator.loaders import day_input_paths
+# import function parse_time from simulator.loaders
+from simulator.loaders import parse_time
 
+from simulator.loaders import day_input_paths
 
 def calculate_metrics(
     parcels: List[Dict[str, str]],
@@ -24,13 +26,79 @@ def calculate_metrics(
     midnight: "17:00" is 17 * 60 = 1020.
     """
 
-    # Illustration only: replace or extend this with your chosen metric.
+    # Map each parcel to its preferred delivery window.
+    windows = {}
+    for row in parcels:
+        pid = row["parcel_id"]
+        windows[pid] = (
+            parse_time(row["delivery_window_start"]),
+            parse_time(row["delivery_window_end"])
+        )
+
+    # Collect actual delivery times and trip count from the log.
+    delivered_at = {}
     number_of_trips = 0
     for event in events:
-        if event["event_type"] == "hub_departure":
+        if event["event_type"] == "delivery":
+            delivered_at[event["parcel_id"]] = float(event["time"])
+        elif event["event_type"] == "hub_departure":
             number_of_trips += 1
-    return {"number_of_trips": number_of_trips}
 
+    total_parcels = len(windows)
+    delivered_count = len(delivered_at)
+    undelivered_count = total_parcels - delivered_count
+
+    on_time_count = 0
+    early_count = 0
+    late_count = 0
+    total_abs_deviation = 0.0
+    max_late_minutes = 0.0
+
+    for pid, (window_start, window_end) in windows.items():
+
+        if pid not in delivered_at:
+            continue
+        t = delivered_at[pid]
+
+        if window_start <= t <= window_end:
+            on_time_count += 1
+
+        elif t < window_start:
+            early_count += 1
+            total_abs_deviation += window_start - t
+
+        else: 
+            late_count += 1
+            late_minutes = t - window_end
+            total_abs_deviation += late_minutes
+            max_late_minutes = max(max_late_minutes, late_minutes)
+
+    on_time_delivery_rate = (
+        on_time_count / total_parcels if total_parcels else 0.0
+    )
+
+    delivered_on_time_rate = (
+        on_time_count / delivered_count if delivered_count else 0.0
+    )
+
+    average_abs_window_deviation_minutes = (
+        total_abs_deviation / delivered_count if delivered_count else 0.0
+    )
+
+    return {
+        "primary_metric": "on_time_delivery_rate",
+        "on_time_delivery_rate": on_time_delivery_rate,
+        "delivered_on_time_rate": delivered_on_time_rate,
+        "total_parcels": total_parcels,
+        "delivered_count": delivered_count,
+        "undelivered_count": undelivered_count,
+        "on_time_count": on_time_count,
+        "early_count": early_count,
+        "late_count": late_count,
+        "average_abs_window_deviation_minutes": average_abs_window_deviation_minutes,
+        "max_late_minutes": max_late_minutes,
+        "number_of_trips": number_of_trips
+    }
 
 def main(argv: Optional[List[str]] = None) -> int:
     """Load one day's inputs and event log, then write the metrics report."""
