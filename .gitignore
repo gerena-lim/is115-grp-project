@@ -1,4 +1,4 @@
 .DS_Store
 __pycache__/
-# results/**/metrics.json
-# results/**/log.txt
+results/**/metrics.json
+results/**/log.txt
