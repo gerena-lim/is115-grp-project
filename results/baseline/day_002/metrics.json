@@ -1,14 +1,13 @@
 {
   "primary_metric": "on_time_delivery_rate",
   "on_time_delivery_rate": 0.29015544041450775,
-  "delivered_on_time_rate": 0.8175182481751825,
-  "total_parcels": 772,
-  "delivered_count": 274,
-  "undelivered_count": 498,
   "on_time_count": 224,
   "early_count": 0,
   "late_count": 50,
-  "average_abs_window_deviation_minutes": 54.63674087591241,
-  "max_late_minutes": 364.4950000000001,
-  "number_of_trips": 20
+  "number_of_trips": 20,
+  "total_distance_km": 5232.827999999998,
+  "avg_vehicle_utilisation": 0.4533333333333333,
+  "total_late_minutes": 14970.467,
+  "delivered_count": 274,
+  "undelivered_count": 498
 }

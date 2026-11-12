@@ -26,78 +26,94 @@ def calculate_metrics(
     midnight: "17:00" is 17 * 60 = 1020.
     """
 
-    # Map each parcel to its preferred delivery window.
+      # ---------- lookups ----------------------------------------------------
     windows = {}
+    location_of = {}
+    size_of = {}
     for row in parcels:
         pid = row["parcel_id"]
         windows[pid] = (
             parse_time(row["delivery_window_start"]),
-            parse_time(row["delivery_window_end"])
+            parse_time(row["delivery_window_end"]),
         )
+        location_of[pid] = row["delivery_location_id"]
+        size_of[pid] = float(row["size"])
 
-    # Collect actual delivery times and trip count from the log.
+    dlookup = {
+        (row["location_1"], row["location_2"]): float(row["dist"])
+        for row in distances
+    }
+
+    capacity = float(config["capacity"])
+
+    # ---------- parse the log ---------------------------------------------
     delivered_at = {}
+    trips = {}                       # (vehicle_id, trip_id) -> [parcel_ids]
     number_of_trips = 0
-    for event in events:
-        if event["event_type"] == "delivery":
-            delivered_at[event["parcel_id"]] = float(event["time"])
-        elif event["event_type"] == "hub_departure":
+    for ev in events:
+        et = ev["event_type"]
+        if et == "delivery":
+            delivered_at[ev["parcel_id"]] = float(ev["time"])
+            trips.setdefault((ev["vehicle_id"], ev["trip_id"]), []).append(
+                ev["parcel_id"]
+            )
+        elif et == "hub_departure":
             number_of_trips += 1
 
     total_parcels = len(windows)
     delivered_count = len(delivered_at)
-    undelivered_count = total_parcels - delivered_count
 
+    # ---------- primary metric + window classification --------------------
     on_time_count = 0
     early_count = 0
     late_count = 0
-    total_abs_deviation = 0.0
-    max_late_minutes = 0.0
+    total_late_minutes = 0.0
 
-    for pid, (window_start, window_end) in windows.items():
-
-        if pid not in delivered_at:
-            continue
-        t = delivered_at[pid]
-
-        if window_start <= t <= window_end:
+    for pid, (start, end) in windows.items():
+        t = delivered_at.get(pid)
+        if t is None:
+            continue  # undelivered — neither early, on-time, nor late
+        if start <= t <= end:
             on_time_count += 1
-
-        elif t < window_start:
+        elif t < start:
             early_count += 1
-            total_abs_deviation += window_start - t
-
-        else: 
+        else:
             late_count += 1
-            late_minutes = t - window_end
-            total_abs_deviation += late_minutes
-            max_late_minutes = max(max_late_minutes, late_minutes)
+            total_late_minutes += t - end
 
     on_time_delivery_rate = (
         on_time_count / total_parcels if total_parcels else 0.0
     )
 
-    delivered_on_time_rate = (
-        on_time_count / delivered_count if delivered_count else 0.0
-    )
+    # ---------- cost / utilisation ----------------------------------------
+    total_distance_km = 0.0
+    loads = []
+    for pids in trips.values():
+        prev = "HUB"
+        for pid in pids:
+            loc = location_of[pid]
+            total_distance_km += dlookup[(prev, loc)]
+            prev = loc
+        total_distance_km += dlookup[(prev, "HUB")]
+        loads.append(sum(size_of[pid] for pid in pids))
 
-    average_abs_window_deviation_minutes = (
-        total_abs_deviation / delivered_count if delivered_count else 0.0
+    n_trips = len(trips)
+    avg_vehicle_utilisation = (
+        sum(loads) / (n_trips * capacity) if n_trips and capacity else 0.0
     )
 
     return {
         "primary_metric": "on_time_delivery_rate",
         "on_time_delivery_rate": on_time_delivery_rate,
-        "delivered_on_time_rate": delivered_on_time_rate,
-        "total_parcels": total_parcels,
-        "delivered_count": delivered_count,
-        "undelivered_count": undelivered_count,
         "on_time_count": on_time_count,
         "early_count": early_count,
         "late_count": late_count,
-        "average_abs_window_deviation_minutes": average_abs_window_deviation_minutes,
-        "max_late_minutes": max_late_minutes,
-        "number_of_trips": number_of_trips
+        "number_of_trips": number_of_trips,
+        "total_distance_km": total_distance_km,
+        "avg_vehicle_utilisation": avg_vehicle_utilisation,
+        "total_late_minutes": total_late_minutes,
+        "delivered_count": delivered_count,
+        "undelivered_count": total_parcels - delivered_count,
     }
 
 def main(argv: Optional[List[str]] = None) -> int:

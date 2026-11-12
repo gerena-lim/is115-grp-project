@@ -80,7 +80,7 @@ def on_time_predicted(route: List[str], parcel: Dict[str, Parcel],
 
 
 # ---------------------------------------------------------------------------
-# Hard-constraint checking
+# Hard-constraint checking (capacity, range, return cutoff)
 # ---------------------------------------------------------------------------
 
 def route_feasible(route: List[str], parcel: Dict[str, Parcel],
@@ -91,6 +91,10 @@ def route_feasible(route: List[str], parcel: Dict[str, Parcel],
     Returns ``(True, "")`` if the route can be committed, otherwise
     ``(False, reason)``. ``departure_time`` defaults to
     ``current_time + departure_delay`` as the simulator uses.
+
+    Capacity is ``context["capacity"]`` (30 units in this project). The
+    load is the sum of parcel sizes on the route; a trip whose load
+    exceeds capacity is rejected.
     """
     if not route:
         return True, ""
@@ -140,6 +144,9 @@ def route_penalty(route: List[str], parcel: Dict[str, Parcel],
     * ``late_weight``  * minutes past ``delivery_window_end``
     * ``early_weight`` * minutes before ``delivery_window_start``
     * ``distance_weight`` * total route distance (km)
+
+    This is a soft objective only; it does **not** enforce capacity, range
+    or the return cutoff. Callers should check :func:`route_feasible` first.
     """
     if not route:
         return 0.0
@@ -161,9 +168,19 @@ def route_penalty(route: List[str], parcel: Dict[str, Parcel],
 # Insertion support
 # ---------------------------------------------------------------------------
 
-def best_insertion_index(route: List[str], pid: str, parcel: Dict[str, Parcel],
+def best_insertion_index(route: List[str], pid: str,
+                         parcel: Dict[str, Parcel],
                          dist: Dict[str, Dict[str, float]]) -> Tuple[int, float]:
-    """Return ``(index, delta_distance_km)`` of the cheapest insertion."""
+    """Return ``(index, delta_distance_km)`` of the cheapest insertion.
+
+    .. warning::
+        This is a **pure distance** heuristic and does **not** check
+        capacity, range, or time-window feasibility. It is provided for
+        distance-only analysis / reporting and for callers that have
+        already pre-filtered candidates by size. For a dispatch policy,
+        use :func:`try_insert` instead, which enforces capacity, range
+        and the return cutoff.
+    """
     loc = parcel[pid]["delivery_location_id"]
     best_index = 0
     best_delta = float("inf")
@@ -187,14 +204,24 @@ def try_insert(route: List[str], pid: str, parcel: Dict[str, Parcel],
     Picks the best insertion position that keeps the route feasible and
     returns ``(new_route, insertion_index)``, or ``None`` if capacity,
     range, or the return cutoff would be violated.
+
+    The function performs two complementary capacity checks:
+
+    1. An O(1) pre-check using :func:`route_load`; if even one insertion
+       cannot fit, we return ``None`` without scanning positions.
+    2. A full :func:`route_feasible` call on each trial route, which
+       re-validates capacity, range and the return cutoff for the whole
+       route.
     """
+    # Capacity pre-check: if the parcel cannot possibly fit, skip the scan.
     if route_load(route, parcel) + parcel[pid]["size"] > context["capacity"] + EPS:
         return None
+
     dist = context["travel_distance"]
-    # Try each position, keeping only feasible ones.
     best_score = float("inf")
     best_route: Optional[List[str]] = None
     best_index = -1
+
     for i in range(len(route) + 1):
         trial = route[:i] + [pid] + route[i:]
         ok, _ = route_feasible(trial, parcel, context)
@@ -208,6 +235,7 @@ def try_insert(route: List[str], pid: str, parcel: Dict[str, Parcel],
             best_score = score
             best_route = trial
             best_index = i
+
     if best_route is None:
         return None
     return best_route, best_index
@@ -231,7 +259,10 @@ def urgency_key(pid: str, parcel: Dict[str, Parcel]
 
 def earliest_direct_arrival(pid: str, parcel: Dict[str, Parcel],
                             context: SimulationContext) -> float:
-    """Earliest possible arrival if the parcel is the only stop."""
+    """Earliest possible arrival if the parcel is the only stop.
+
+    Useful as a lower bound on delivery time when filtering candidates.
+    """
     record = parcel[pid]
     departure = context["current_time"] + context["departure_delay"]
     return departure + context["travel_distance"][HUB][record["delivery_location_id"]]
@@ -245,11 +276,22 @@ def is_hopeless(pid: str, parcel: Dict[str, Parcel],
     destination and uses the minimum round-trip distance, so if that trip
     is infeasible or already too late for the parcel's window, no longer
     route can make the parcel on-time.
+
+    The check also covers two edge cases:
+
+    * ``size > capacity`` -- the parcel cannot fit on any vehicle, so it
+      is hopeless regardless of location or timing.
+    * Direct trip exceeds the vehicle range or the return cutoff.
     """
     record = parcel[pid]
     dist = context["travel_distance"]
     loc = record["delivery_location_id"]
     departure = context["current_time"] + context["departure_delay"]
+
+    # Size check: a parcel larger than vehicle capacity can never be sent.
+    if record["size"] > context["capacity"] + EPS:
+        return True
+
     one_way = dist[HUB][loc]
     round_trip = one_way + dist[loc][HUB]
     if round_trip > context["max_trip_distance_km"] + EPS:
