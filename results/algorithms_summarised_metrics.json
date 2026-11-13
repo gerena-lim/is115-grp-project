@@ -88,5 +88,23 @@
     "total_late_minutes": 1954.28,
     "total_trips": 651,
     "total_distance_km": 81033.67
+  },
+  "window_aware_dispatch": {
+    "days_found": 20,
+    "days_missing": [],
+    "total_parcel": 15867,
+    "on_time_delivery_rate": 0.9483,
+    "early_rate": 0.0,
+    "late_rate": 0.0,
+    "completion_rate": 0.9483,
+    "late_per_delivered": 0.0,
+    "total_on_time": 15046,
+    "total_early": 0,
+    "total_late": 0,
+    "total_delivered": 15046,
+    "total_undelivered": 821,
+    "total_late_minutes": 0.0,
+    "total_trips": 588,
+    "total_distance_km": 53748.34
   }
 }
