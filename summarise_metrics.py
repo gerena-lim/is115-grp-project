@@ -36,6 +36,7 @@ POLICIES = [
     "heuristic_best",
     "knapsack_dispatch",
     "nearest_neighbour",
+    "window_aware_dispatch"
 ]
 
 DAYS = [f"day_{d:03d}" for d in range(1, 21)]
