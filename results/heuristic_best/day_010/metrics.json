@@ -1,0 +1,13 @@
+{
+  "primary_metric": "on_time_delivery_rate",
+  "on_time_delivery_rate": 0.5363748458692972,
+  "on_time_count": 435,
+  "early_count": 36,
+  "late_count": 93,
+  "number_of_trips": 22,
+  "total_distance_km": 4828.028999999998,
+  "avg_vehicle_utilisation": 0.8119696969696969,
+  "total_late_minutes": 5510.703999999999,
+  "delivered_count": 564,
+  "undelivered_count": 247
+}
